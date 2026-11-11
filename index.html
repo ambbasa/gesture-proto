@@ -1251,9 +1251,11 @@ h2 { margin: 0 0 8px; font-size: 20px; }
   function guardEvents() {
     var app = $('app');
     function stop(e) { e.preventDefault(); }
+    // 버튼 위 터치는 막지 않음(막으면 모바일에서 click이 안 생김). 스크롤·확대는 touch-action:none이 막음.
+    function stopTouch(e) { if (e.target && e.target.closest && e.target.closest('button,a,input,label')) return; e.preventDefault(); }
     ['touchstart', 'touchmove', 'touchend', 'gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
-      document.addEventListener(ev, stop, { passive: false });
-      app.addEventListener(ev, stop, { passive: false });
+      document.addEventListener(ev, stopTouch, { passive: false });
+      app.addEventListener(ev, stopTouch, { passive: false });
     });
     document.addEventListener('contextmenu', stop);
     document.addEventListener('dblclick', stop);
