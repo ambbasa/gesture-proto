@@ -1,0 +1,1354 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <title>제스처 키우기</title>
+  <style>
+/* 제스처 키우기 — mobile first, no scroll / zoom / callout */
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  overflow: hidden; overscroll-behavior: none; overscroll-behavior-y: none;
+  touch-action: none; -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  background: #1c1914; color: #1c1914;
+  font-family: "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+html, body, #app, #field, canvas { touch-action: none; }
+#app {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  overflow: hidden; overscroll-behavior: none;
+  display: flex; flex-direction: column;
+  touch-action: none;
+}
+#bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.bg-art { width: 100%; height: 100%; display: block; }
+.lantern { transform-box: fill-box; transform-origin: 16px 0; animation: sway 3.6s ease-in-out infinite; }
+.lantern:nth-of-type(2) { animation-delay: -1.4s; }
+@keyframes sway { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2.4deg); } }
+
+#hud {
+  position: relative; z-index: 3; flex: 0 0 auto;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 6px;
+  color: #1c1914;
+  text-shadow: 0 1px 0 #f4efe4;
+  background: linear-gradient(to bottom, rgba(232,220,190,.82), rgba(232,220,190,0));
+  pointer-events: none;
+}
+.hud-row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; min-height: 22px; }
+#stageLabel, #timer, #killLabel, #coinLabel, #lvlLabel { white-space: nowrap; }
+#timer { min-width: 2em; }
+#hpWrap { flex: 1 1 auto; min-width: 0; }
+#hpPips { display: flex; gap: 3px; flex-wrap: wrap; }
+#hpPips i { width: 10px; height: 10px; border-radius: 2px; background: #8b2a1a; box-shadow: inset 0 0 0 1px #3a1510; display: block; }
+#hpPips i.off { background: #c9bba0; box-shadow: inset 0 0 0 1px #7a6b52; }
+#xpWrap { flex: 1 1 80px; height: 8px; background: #3a3428; border-radius: 4px; overflow: hidden; min-width: 48px; }
+#xpFill { height: 100%; width: 0; background: #c9a24a; }
+#comboLabel { color: #8b2a1a; }
+
+#field {
+  position: relative; z-index: 1; flex: 1 1 auto; min-height: 0;
+  overflow: hidden; touch-action: none;
+}
+#ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; }
+.hero {
+  position: absolute; left: 50%; top: 52%; width: 72px; height: 100px;
+  transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+}
+.hero .sage { width: 100%; height: 100%; display: block; overflow: visible; }
+.hero.hurt { filter: brightness(1.3) saturate(1.4); animation: hurt .35s; }
+.hero.win .sage { filter: drop-shadow(0 0 8px #e7c56a); }
+@keyframes hurt { 0%,100% { transform: translate(-50%,-50%); } 30% { transform: translate(-42%,-50%); } 60% { transform: translate(-58%,-50%); } }
+
+#aura {
+  position: absolute; left: 50%; top: 52%; transform: translate(-50%,-50%);
+  border: 2px dashed rgba(80, 40, 20, .35); border-radius: 50%;
+  pointer-events: none; z-index: 2;
+}
+
+.foe { position: absolute; z-index: 3; pointer-events: none; transform: translate(-50%,-50%); }
+.foe .yokai { width: 56px; height: 56px; display: block; overflow: visible; }
+.foe.boss .yokai { width: 88px; height: 88px; filter: drop-shadow(0 0 8px #8b2a1a); }
+.foe.boss .yokai ellipse[fill="#8b3a2a"] { fill: #5a1e4a; }
+.foe-shapes {
+  display: flex; gap: 3px; justify-content: center; margin: 0 0 2px;
+  min-height: 22px;
+}
+.chip {
+  min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px;
+  background: #f4efe4; color: #1c1914; border: 1px solid #2a241c;
+  font-weight: 800; font-size: 13px; line-height: 20px; text-align: center;
+  box-shadow: 0 1px 0 #fff8; display: inline-block;
+}
+.chip.now { outline: 2px solid #8b2a1a; background: #f6e27a; }
+.orb {
+  position: absolute; z-index: 5; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+  border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #7dcf8a 45%, #2c6b3c);
+  box-shadow: 0 0 8px #7dcf8a; pointer-events: none;
+}
+
+#toast {
+  position: absolute; left: 50%; top: 22%; transform: translateX(-50%);
+  z-index: 8; max-width: 86%; padding: 8px 14px; border-radius: 6px;
+  background: rgba(28, 25, 20, .88); color: #f4efe4; font-size: 14px; font-weight: 700;
+  text-align: center; pointer-events: none; line-height: 1.35;
+}
+
+.ov {
+  position: absolute; inset: 0; z-index: 10; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(28, 25, 20, .45); padding: 16px;
+  overflow: auto; overscroll-behavior: none;
+}
+.ov.show { display: flex; }
+.card {
+  width: min(340px, 100%); max-height: 100%;
+  background: #f4efe4; border: 2px solid #2a241c; border-radius: 8px;
+  padding: 16px 14px 14px; box-sizing: border-box;
+  box-shadow: 0 8px 0 #2a241c; text-align: center;
+  overflow: auto;
+}
+.title-card h1 { margin: 4px 0 6px; font-size: 26px; letter-spacing: .04em; }
+.title-card .sub { margin: 0 0 10px; font-size: 13px; }
+.seal {
+  width: 44px; height: 44px; margin: 0 auto 4px; border: 3px solid #8b2a1a; color: #8b2a1a;
+  font-size: 26px; font-weight: 900; line-height: 38px; transform: rotate(-8deg);
+}
+.shapes-help { display: flex; justify-content: center; gap: 10px; margin: 0 0 14px; }
+.shapes-help span {
+  width: 36px; height: 36px; border: 1px solid #2a241c; border-radius: 6px;
+  background: #fff; line-height: 34px; font-weight: 800; font-size: 18px;
+}
+.btn {
+  display: block; width: 100%; margin: 8px 0 0; padding: 12px 10px;
+  min-height: 44px; border: 2px solid #2a241c; border-radius: 6px;
+  background: #e8dcc0; color: #1c1914; font: inherit; font-weight: 800; font-size: 16px;
+  touch-action: manipulation; -webkit-user-select: none;
+}
+.btn.primary { background: #8b2a1a; color: #f4efe4; }
+.btn.ad { background: #3a4543; color: #f4efe4; }
+.btn[disabled] { opacity: .45; }
+.shop-list { display: flex; flex-direction: column; gap: 0; }
+.shop-item { text-align: left; font-size: 14px; line-height: 1.3; }
+.shop-coins { margin: 0 0 8px; }
+.ad-note { margin: 8px 0 0; font-size: 11px; opacity: .7; }
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.choices .btn { margin: 0; text-align: left; }
+h2 { margin: 0 0 8px; font-size: 20px; }
+
+@media (max-height: 600px) {
+  .hero { width: 60px; height: 84px; }
+  .foe .yokai { width: 48px; height: 48px; }
+  .title-card h1 { font-size: 22px; }
+  #hud { padding-top: calc(4px + env(safe-area-inset-top, 0px)); }
+  .hud-row { font-size: 12px; }
+}
+
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="bg" aria-hidden="true">
+      <svg class="bg-art" viewBox="0 0 375 667" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#8aa3b0"/>
+            <stop offset="38%" stop-color="#c5b79a"/>
+            <stop offset="70%" stop-color="#d7cbb0"/>
+            <stop offset="100%" stop-color="#cbb890"/>
+          </linearGradient>
+          <linearGradient id="mistG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f4efe4" stop-opacity="0"/>
+            <stop offset="50%" stop-color="#f4efe4" stop-opacity=".55"/>
+            <stop offset="100%" stop-color="#f4efe4" stop-opacity="0"/>
+          </linearGradient>
+          <pattern id="tiles" width="28" height="16" patternUnits="userSpaceOnUse">
+            <path d="M14 0 L28 8 L14 16 L0 8 Z" fill="#b9a57c" stroke="#6d5a3a" stroke-width=".7"/>
+            <path d="M14 0 L28 8 L14 16 L0 8 Z" fill="none" stroke="#efe6cf" stroke-width=".25" opacity=".5"/>
+          </pattern>
+        </defs>
+        <rect width="375" height="667" fill="url(#sky)"/>
+        <!-- distant mountains, ink-wash -->
+        <path d="M-20 250 C40 200 80 220 130 180 C170 150 190 200 250 160 C300 130 340 190 400 170 L400 320 L-20 320 Z" fill="#6d7c80" opacity=".55"/>
+        <path d="M-20 290 C30 250 90 270 150 230 C200 200 230 260 300 220 C340 200 370 240 400 230 L400 360 L-20 360 Z" fill="#4f5d5c" opacity=".7"/>
+        <path d="M-20 340 C50 310 110 350 170 320 C230 290 260 350 330 320 C360 308 385 330 400 325 L400 430 L-20 430 Z" fill="#3a4543"/>
+        <rect x="-20" y="250" width="440" height="90" fill="url(#mistG)"/>
+        <rect x="-20" y="330" width="440" height="70" fill="url(#mistG)" opacity=".7"/>
+        <!-- courtyard tiles -->
+        <rect x="-10" y="430" width="400" height="250" fill="url(#tiles)"/>
+        <!-- tile edge / stone plinth -->
+        <path d="M-10 428 L385 428 L385 438 L-10 438 Z" fill="#5a4a32"/>
+        <rect x="118" y="470" width="140" height="86" rx="6" fill="#8a734c" stroke="#3f3424" stroke-width="2"/>
+        <rect x="126" y="478" width="124" height="70" rx="3" fill="#a38a5c" opacity=".45"/>
+        <!-- pine silhouettes -->
+        <g fill="#24312c" opacity=".85">
+          <path d="M48 470 L40 430 L52 430 L36 400 L56 400 L30 372 L66 400 L50 400 L64 430 L52 430 L60 470 Z"/>
+          <path d="M28 478 L22 448 L32 448 L16 424 L36 424 L12 404 L42 424 L32 424 L44 448 L34 448 L40 478 Z"/>
+          <path d="M330 468 L338 426 L326 426 L344 394 L322 394 L350 366 L312 394 L328 394 L316 426 L328 426 L320 468 Z"/>
+        </g>
+        <!-- lantern posts -->
+        <g class="lantern" transform="translate(28 150)">
+          <rect x="14" y="0" width="3" height="86" fill="#2c2418"/>
+          <rect x="4" y="86" width="22" height="6" rx="1" fill="#2c2418"/>
+          <path d="M6 32 h18 l-2 28 h-14 Z" fill="#c45a2a"/>
+          <path d="M8 36 h14 l-1.4 20 h-11.2 Z" fill="#e7c56a" opacity=".7"/>
+          <rect x="5" y="30" width="20" height="4" fill="#3a2a18"/>
+          <rect x="5" y="58" width="20" height="4" fill="#3a2a18"/>
+          <circle cx="15.5" cy="46" r="3.2" fill="#fff3c4" opacity=".85"/>
+        </g>
+        <g class="lantern" transform="translate(322 170)">
+          <rect x="14" y="0" width="3" height="86" fill="#2c2418"/>
+          <rect x="4" y="86" width="22" height="6" rx="1" fill="#2c2418"/>
+          <path d="M6 32 h18 l-2 28 h-14 Z" fill="#c45a2a"/>
+          <path d="M8 36 h14 l-1.4 20 h-11.2 Z" fill="#e7c56a" opacity=".7"/>
+          <rect x="5" y="30" width="20" height="4" fill="#3a2a18"/>
+          <rect x="5" y="58" width="20" height="4" fill="#3a2a18"/>
+          <circle cx="15.5" cy="46" r="3.2" fill="#fff3c4" opacity=".85"/>
+        </g>
+      </svg>
+    </div>
+
+    <header id="hud">
+      <div class="hud-row">
+        <span id="stageLabel">1판</span>
+        <span id="timer">75</span>
+        <span id="killLabel">0/20</span>
+        <span id="coinLabel">엽전 0</span>
+      </div>
+      <div class="hud-row">
+        <div id="hpWrap" title="체력"><span id="hpPips"></span></div>
+        <div id="xpWrap"><div id="xpFill"></div></div>
+        <span id="lvlLabel">Lv 1</span>
+        <span id="comboLabel" hidden></span>
+      </div>
+    </header>
+
+    <div id="field">
+      <div id="aura" hidden></div>
+      <div id="hero" class="hero">
+        <svg viewBox="0 0 80 112" class="sage" role="img" aria-label="도사">
+          <ellipse cx="40" cy="106" rx="18" ry="5" fill="#000" opacity=".2"/>
+          <!-- shoes -->
+          <rect x="26" y="98" width="12" height="6" rx="2" fill="#2a241c"/>
+          <rect x="44" y="98" width="12" height="6" rx="2" fill="#2a241c"/>
+          <!-- robe -->
+          <path d="M28 46 L18 98 H62 L52 46 Z" fill="#f2ead6" stroke="#2a241c" stroke-width="1.4"/>
+          <path d="M40 46 L34 98 H46 Z" fill="#d9c9a0"/>
+          <path d="M28 46 H52 L48 56 H32 Z" fill="#2c3a38"/>
+          <path d="M24 70 L40 78 L56 70" fill="none" stroke="#8b2a1a" stroke-width="2"/>
+          <!-- left talisman -->
+          <g transform="translate(8 58) rotate(-18)">
+            <rect x="0" y="0" width="12" height="22" rx="1" fill="#f6e27a" stroke="#2a241c" stroke-width="1"/>
+            <path d="M3 4 H9 M6 4 V18 M3 10 H9 M4 15 Q6 18 9 14" fill="none" stroke="#b31b1b" stroke-width="1.2"/>
+          </g>
+          <!-- right brush -->
+          <g transform="translate(62 52) rotate(16)">
+            <rect x="0" y="0" width="3.2" height="28" rx="1" fill="#3a2a18"/>
+            <rect x="-.4" y="26" width="4" height="5" fill="#1a1a1a"/>
+            <path d="M1.6 31 L-1 42 Q1.6 46 4.2 42 Z" fill="#1c1a18"/>
+          </g>
+          <!-- sleeves -->
+          <path d="M28 50 C12 58 10 78 16 84 C22 74 28 70 32 62 Z" fill="#efe6d0" stroke="#2a241c" stroke-width="1.2"/>
+          <path d="M52 50 C68 58 70 78 64 84 C58 74 52 70 48 62 Z" fill="#efe6d0" stroke="#2a241c" stroke-width="1.2"/>
+          <!-- head -->
+          <circle cx="40" cy="30" r="14" fill="#f3d2b3" stroke="#2a241c" stroke-width="1.2"/>
+          <path d="M28 28 Q40 16 52 28 Q52 20 40 18 Q28 20 28 28" fill="#1c1a18"/>
+          <path d="M36 16 Q40 8 44 16" fill="#1c1a18"/>
+          <circle cx="40" cy="11" r="3.2" fill="#1c1a18"/>
+          <circle cx="40" cy="11" r="1.1" fill="#c9a24a"/>
+          <circle cx="35" cy="30" r="1.4" fill="#1c1a18"/>
+          <circle cx="45" cy="30" r="1.4" fill="#1c1a18"/>
+          <path d="M36 36 Q40 39 44 36" fill="none" stroke="#1c1a18" stroke-width="1" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div id="foes"></div>
+      <div id="orbs"></div>
+      <canvas id="ink"></canvas>
+    </div>
+
+    <div id="toast" hidden></div>
+
+    <div id="ov-title" class="ov show">
+      <div class="card title-card">
+        <p class="seal">符</p>
+        <h1>제스처 키우기</h1>
+        <p class="sub">한 손으로 모양을 그려 요괴를 물리치세요</p>
+        <p class="shapes-help" aria-hidden="true"><span>ㅣ</span><span>—</span><span>V</span><span>O</span></p>
+        <button type="button" id="btnStart" class="btn primary">출전</button>
+        <button type="button" id="btnShop" class="btn">성장</button>
+      </div>
+    </div>
+
+    <div id="ov-shop" class="ov">
+      <div class="card">
+        <h2>성장</h2>
+        <p class="shop-coins">엽전 <strong id="shopCoins">0</strong></p>
+        <div class="shop-list">
+          <button type="button" class="btn shop-item" data-buy="atk" id="buyAtk"></button>
+          <button type="button" class="btn shop-item" data-buy="hp" id="buyHp"></button>
+          <button type="button" class="btn shop-item" data-buy="coin" id="buyCoin"></button>
+        </div>
+        <button type="button" id="btnShopClose" class="btn primary">닫기</button>
+      </div>
+    </div>
+
+    <div id="ov-result" class="ov">
+      <div class="card">
+        <h2 id="resultTitle">승리</h2>
+        <p id="resultBody"></p>
+        <button type="button" id="btnResultShop" class="btn">성장</button>
+        <button type="button" id="btnResultGo" class="btn primary">다음</button>
+      </div>
+    </div>
+
+    <div id="ov-idle" class="ov">
+      <div class="card">
+        <h2>방치 보상</h2>
+        <p id="idleBody">자리를 비운 동안 엽전이 쌓였습니다.</p>
+        <button type="button" id="btnIdleTake" class="btn primary">받기</button>
+        <button type="button" id="btnIdleDouble" class="btn ad">광고로 두 배 받기</button>
+        <p class="ad-note">실제 광고는 나오지 않습니다 (자리만).</p>
+      </div>
+    </div>
+
+    <div id="ov-level" class="ov">
+      <div class="card">
+        <h2>레벨 업</h2>
+        <p>강화 하나를 고르세요</p>
+        <div id="levelChoices" class="choices"></div>
+      </div>
+    </div>
+  </div>
+
+  <template id="tpl-foe">
+    <div class="foe">
+      <div class="foe-shapes"></div>
+      <svg class="yokai" viewBox="0 0 64 64" aria-hidden="true">
+        <ellipse cx="32" cy="58" rx="14" ry="4" fill="#000" opacity=".2"/>
+        <ellipse cx="32" cy="38" rx="18" ry="16" fill="#8b3a2a" stroke="#2a1810" stroke-width="1.4"/>
+        <path class="horn" d="M22 24 L18 8 L26 22" fill="#e8d9a8" stroke="#2a1810" stroke-width="1"/>
+        <path class="horn" d="M42 24 L46 8 L38 22" fill="#e8d9a8" stroke="#2a1810" stroke-width="1"/>
+        <circle cx="26" cy="36" r="3.2" fill="#f3e27a"/>
+        <circle cx="38" cy="36" r="3.2" fill="#f3e27a"/>
+        <circle cx="26" cy="36" r="1.3" fill="#1a1a1a"/>
+        <circle cx="38" cy="36" r="1.3" fill="#1a1a1a"/>
+        <path d="M24 46 Q32 52 40 46 Q32 50 24 46" fill="#1a1a1a"/>
+        <path d="M20 48 L14 54 M44 48 L50 54" stroke="#8b3a2a" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </template>
+
+  <script>
+/* Gesture recognizer for 제스처 키우기.
+   Shapes: vline (|), hline (—), vee (V), circle (O), plus bolt (⚡) for the skill.
+   Axis-aligned, size-tolerant, slight jitter OK. Ambiguous / short / other shapes → null. */
+(function (root) {
+  function dist(a, b) { var dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }
+  function pathLen(pts) {
+    var l = 0, i; for (i = 1; i < pts.length; i++) l += dist(pts[i - 1], pts[i]);
+    return l;
+  }
+  function bbox(pts) {
+    var i, x0 = pts[0].x, y0 = pts[0].y, x1 = x0, y1 = y0;
+    for (i = 1; i < pts.length; i++) {
+      if (pts[i].x < x0) x0 = pts[i].x; if (pts[i].x > x1) x1 = pts[i].x;
+      if (pts[i].y < y0) y0 = pts[i].y; if (pts[i].y > y1) y1 = pts[i].y;
+    }
+    return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0), diag: Math.hypot(x1 - x0, y1 - y0) };
+  }
+  function resample(pts, n) {
+    if (pts.length < 2) return pts.slice();
+    var L = pathLen(pts), I = L / (n - 1), out = [ { x: pts[0].x, y: pts[0].y } ];
+    var acc = 0, i = 1, prev = { x: pts[0].x, y: pts[0].y };
+    while (i < pts.length && out.length < n) {
+      var d = dist(prev, pts[i]);
+      if (acc + d >= I && d > 0) {
+        var t = (I - acc) / d;
+        var p = { x: prev.x + t * (pts[i].x - prev.x), y: prev.y + t * (pts[i].y - prev.y) };
+        out.push(p); prev = p; acc = 0;
+      } else { acc += d; prev = pts[i]; i++; }
+    }
+    while (out.length < n) out.push({ x: pts[pts.length - 1].x, y: pts[pts.length - 1].y });
+    return out;
+  }
+  function straightness(pts) {
+    var L = pathLen(pts), c = dist(pts[0], pts[pts.length - 1]);
+    return L < 1 ? 0 : c / L;
+  }
+  function lineDev(pts, a, b) {
+    var lx = b.x - a.x, ly = b.y - a.y, ll = Math.hypot(lx, ly) || 1, i, m = 0;
+    for (i = 0; i < pts.length; i++) {
+      var d = Math.abs(lx * (a.y - pts[i].y) - ly * (a.x - pts[i].x)) / ll;
+      if (d > m) m = d;
+    }
+    return m;
+  }
+  function perpDist(a, p, b) {
+    var lx = b.x - a.x, ly = b.y - a.y, ll = Math.hypot(lx, ly);
+    if (ll < 1e-6) return dist(a, p);
+    return Math.abs(lx * (a.y - p.y) - ly * (a.x - p.x)) / ll;
+  }
+  function simplify(pts, eps) {
+    if (pts.length <= 2) return pts.slice();
+    var maxD = -1, idx = -1, i;
+    for (i = 1; i < pts.length - 1; i++) {
+      var d = perpDist(pts[0], pts[i], pts[pts.length - 1]);
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > eps && idx > 0) {
+      var L = simplify(pts.slice(0, idx + 1), eps);
+      var R = simplify(pts.slice(idx), eps);
+      return L.slice(0, -1).concat(R);
+    }
+    return [pts[0], pts[pts.length - 1]];
+  }
+  function centroid(pts) {
+    var i, x = 0, y = 0; for (i = 0; i < pts.length; i++) { x += pts[i].x; y += pts[i].y; }
+    return { x: x / pts.length, y: y / pts.length };
+  }
+  function totalTurn(pts) {
+    var i, a = 0, prev;
+    for (i = 1; i < pts.length; i++) {
+      var ang = Math.atan2(pts[i].y - pts[i - 1].y, pts[i].x - pts[i - 1].x);
+      if (i > 1) {
+        var d = ang - prev;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        a += d;
+      }
+      prev = ang;
+    }
+    return a;
+  }
+  function angleSpan(pts, c) {
+    var angs = pts.map(function (p) { return Math.atan2(p.y - c.y, p.x - c.x); });
+    var i, seen = 0, buckets = [];
+    for (i = 0; i < 36; i++) buckets[i] = 0;
+    for (i = 0; i < angs.length; i++) {
+      var b = Math.floor(((angs[i] + Math.PI) / (2 * Math.PI)) * 36) % 36;
+      if (!buckets[b]) { buckets[b] = 1; seen++; }
+    }
+    return seen / 36;
+  }
+  function radiusStats(pts, c) {
+    var i, rs = [], s = 0, m, v = 0;
+    for (i = 0; i < pts.length; i++) { rs.push(dist(pts[i], c)); s += rs[i]; }
+    m = s / rs.length;
+    for (i = 0; i < rs.length; i++) v += (rs[i] - m) * (rs[i] - m);
+    return { mean: m, cv: m < 1 ? 1 : Math.sqrt(v / rs.length) / m };
+  }
+  function vertexIndex(pts) {
+    var i, m = -1, idx = 0;
+    for (i = 0; i < pts.length; i++) if (pts[i].y > m) { m = pts[i].y; idx = i; }
+    return idx;
+  }
+  function clamp01(n) { return n < 0 ? 0 : n > 1 ? 1 : n; }
+
+  function scoreVline(pts, bb, L) {
+    var a = pts[0], b = pts[pts.length - 1], s = straightness(pts);
+    var ny = Math.abs(b.y - a.y) / L, nx = Math.abs(b.x - a.x) / L;
+    var dev = lineDev(pts, a, b) / L;
+    var aspect = bb.w / bb.h;
+    if (bb.h < 32) return 0;
+    var sc = 1;
+    sc *= clamp01((ny - 0.62) / 0.28);
+    sc *= clamp01((0.50 - nx) / 0.50);
+    sc *= clamp01((s - 0.70) / 0.20);
+    sc *= clamp01((0.70 - aspect) / 0.70);
+    sc *= clamp01((0.28 - dev) / 0.28);
+    return sc;
+  }
+  function scoreHline(pts, bb, L) {
+    var a = pts[0], b = pts[pts.length - 1], s = straightness(pts);
+    var ny = Math.abs(b.y - a.y) / L, nx = Math.abs(b.x - a.x) / L;
+    var dev = lineDev(pts, a, b) / L;
+    var aspect = bb.h / bb.w;
+    if (bb.w < 32) return 0;
+    var sc = 1;
+    sc *= clamp01((nx - 0.62) / 0.28);
+    sc *= clamp01((0.50 - ny) / 0.50);
+    sc *= clamp01((s - 0.70) / 0.20);
+    sc *= clamp01((0.70 - aspect) / 0.70);
+    sc *= clamp01((0.28 - dev) / 0.28);
+    return sc;
+  }
+  function scoreVee(pts, bb, L) {
+    if (bb.w < 28 || bb.h < 28) return 0;
+    var vi = vertexIndex(pts);
+    var t = vi / (pts.length - 1);
+    if (t < 0.18 || t > 0.82) return 0;
+    var v = pts[vi], a = pts[0], b = pts[pts.length - 1];
+    var dropA = (v.y - a.y) / bb.h, dropB = (v.y - b.y) / bb.h;
+    var closeY = Math.abs(a.y - b.y) / bb.h;
+    var spread = Math.abs(a.x - b.x) / bb.w;
+    var left = pts.slice(0, vi + 1), right = pts.slice(vi);
+    if (left.length < 3 || right.length < 3) return 0;
+    var sL = straightness(left), sR = straightness(right);
+    var closure = dist(a, b) / L;
+    // angle at vertex
+    var a1 = Math.atan2(a.y - v.y, a.x - v.x), a2 = Math.atan2(b.y - v.y, b.x - v.x);
+    var ang = Math.abs(a1 - a2); if (ang > Math.PI) ang = 2 * Math.PI - ang;
+    var deg = ang * 180 / Math.PI;
+    // downward first half, upward second (y increases downward)
+    var down = 0, i;
+    for (i = 1; i < left.length; i++) if (left[i].y >= left[i - 1].y) down++;
+    var up = 0;
+    for (i = 1; i < right.length; i++) if (right[i].y <= right[i - 1].y) up++;
+    // closed paths (O, square) and wide basins (U) are not V
+    if (closure < 0.22 || dist(a, b) < bb.diag * 0.28) return 0;
+    var near = 0;
+    for (i = 0; i < pts.length; i++) if ((v.y - pts[i].y) / bb.h < 0.18) near++;
+    if (near / pts.length > 0.28) return 0;
+    var sc = 1;
+    sc *= clamp01((dropA - 0.22) / 0.35);
+    sc *= clamp01((dropB - 0.22) / 0.35);
+    sc *= clamp01((0.55 - closeY) / 0.55);
+    sc *= clamp01((spread - 0.22) / 0.4);
+    sc *= clamp01((sL - 0.68) / 0.22);
+    sc *= clamp01((sR - 0.68) / 0.22);
+    sc *= clamp01((deg - 24) / 30) * clamp01((155 - deg) / 40);
+    sc *= clamp01((down / (left.length - 1) - 0.55) / 0.35);
+    sc *= clamp01((up / (right.length - 1) - 0.55) / 0.35);
+    sc *= clamp01((bb.w / bb.h - 0.24) / 0.35);
+    return sc;
+  }
+  function scoreCircle(pts, bb, L) {
+    if (Math.min(bb.w, bb.h) < 28) return 0;
+    var a = pts[0], b = pts[pts.length - 1];
+    var closure = dist(a, b) / Math.max(bb.diag, 1);
+    var c = centroid(pts);
+    var rs = radiusStats(pts, c);
+    var cover = angleSpan(pts, c);
+    var turn = Math.abs(totalTurn(pts));
+    var loops = turn / (2 * Math.PI);
+    var aspect = bb.w / bb.h; if (aspect < 1) aspect = 1 / aspect;
+    var circ = L / (2 * Math.PI * Math.max(rs.mean, 1));
+    var sc = 1;
+    sc *= clamp01((0.32 - closure) / 0.32);
+    sc *= clamp01((0.38 - rs.cv) / 0.38);
+    sc *= clamp01((cover - 0.62) / 0.28);
+    sc *= clamp01((loops - 0.62) / 0.28) * clamp01((1.45 - loops) / 0.4);
+    sc *= clamp01((2.15 - aspect) / 1.15);
+    sc *= clamp01((circ - 0.62) / 0.25) * clamp01((1.5 - circ) / 0.45);
+    return sc;
+  }
+  function scoreBolt(pts, bb, L) {
+    if (bb.h < 40) return 0;
+    var simple = simplify(pts, Math.max(8, bb.diag * 0.1));
+    if (simple.length < 4 || simple.length > 8) return 0;
+    var netY = simple[simple.length - 1].y - simple[0].y;
+    if (netY / bb.h < 0.2 && bb.h / bb.w < 0.7) {
+      // horizontal Z still ok if 3 segments zigzag
+    }
+    var i, flips = 0, downs = 0;
+    for (i = 1; i < simple.length; i++) {
+      if (simple[i].y > simple[i - 1].y) downs++;
+    }
+    for (i = 2; i < simple.length; i++) {
+      var dx0 = simple[i - 1].x - simple[i - 2].x;
+      var dx1 = simple[i].x - simple[i - 1].x;
+      if (dx0 * dx1 < 0 && Math.abs(dx0) > 4 && Math.abs(dx1) > 4) flips++;
+    }
+    var closure = dist(pts[0], pts[pts.length - 1]) / L;
+    var sc = 1;
+    sc *= clamp01((flips - 1.1) / 1.2);
+    sc *= clamp01((simple.length - 3.1) / 1.2) * clamp01((8.2 - simple.length) / 3);
+    sc *= clamp01((closure - 0.2) / 0.3);
+    sc *= clamp01((Math.max(bb.w, bb.h) - 40) / 40);
+    // must not be a plain V (3 corners) or circle
+    if (flips < 2) sc *= 0.2;
+    return sc;
+  }
+
+  var LABELS = { vline: 'ㅣ', hline: '—', vee: 'V', circle: 'O', bolt: '⚡' };
+  var COMBAT = ['vline', 'hline', 'vee', 'circle'];
+
+  function recognize(raw, opts) {
+    opts = opts || {};
+    var pts = [];
+    var i, p;
+    for (i = 0; i < (raw || []).length; i++) {
+      p = raw[i];
+      if (!p) continue;
+      if (pts.length && dist(pts[pts.length - 1], p) < 0.8) continue;
+      pts.push({ x: +p.x, y: +p.y });
+    }
+    if (pts.length < 6) return { type: null, reason: 'short', scores: {}, label: null };
+    var L = pathLen(pts);
+    if (L < 48) return { type: null, reason: 'short', scores: {}, label: null };
+    var rs = resample(pts, 48);
+    var bb = bbox(rs);
+    var scores = {
+      vline: scoreVline(rs, bb, pathLen(rs)),
+      hline: scoreHline(rs, bb, pathLen(rs)),
+      vee: scoreVee(rs, bb, pathLen(rs)),
+      circle: scoreCircle(rs, bb, pathLen(rs)),
+      bolt: scoreBolt(rs, bb, pathLen(rs))
+    };
+    var allowBolt = !!opts.allowBolt;
+    var keys = allowBolt ? COMBAT.concat(['bolt']) : COMBAT.slice();
+    var best = null, bestS = 0, second = 0;
+    for (i = 0; i < keys.length; i++) {
+      var s = scores[keys[i]] || 0;
+      if (s > bestS) { second = bestS; bestS = s; best = keys[i]; }
+      else if (s > second) second = s;
+    }
+    var TH = 0.38;
+    var MARGIN = 0.05;
+    if (allowBolt && (scores.bolt || 0) >= 0.55 && (scores.bolt || 0) >= bestS - 0.02) {
+      best = 'bolt'; bestS = scores.bolt;
+    } else if ((scores.circle || 0) >= 0.36 && (scores.circle || 0) + 0.08 >= (scores.vee || 0) && (scores.circle || 0) >= (scores.vline || 0) && (scores.circle || 0) >= (scores.hline || 0)) {
+      best = 'circle'; bestS = scores.circle;
+    }
+    if (!best || bestS < TH || (second > 0 && bestS - second < MARGIN && second >= TH * 0.9 && best !== 'circle')) {
+      return { type: null, reason: best ? 'ambiguous' : 'unknown', scores: scores, label: null, best: best, bestScore: bestS };
+    }
+    return { type: best, reason: null, scores: scores, label: LABELS[best], best: best, bestScore: bestS };
+  }
+
+  var API = {
+    recognize: recognize,
+    resample: resample,
+    pathLen: pathLen,
+    bbox: bbox,
+    simplify: simplify,
+    LABELS: LABELS,
+    COMBAT: COMBAT
+  };
+  root.GPGestures = API;
+  if (typeof module !== 'undefined' && module.exports) module.exports = API;
+})(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);
+
+</script>
+  <script>
+/* 제스처 키우기 — vampire-survivors stage, gesture combat, coin shop, idle. */
+(function () {
+  var G = typeof GPGestures !== 'undefined' ? GPGestures : require('./gestures.js');
+  var SAVE_KEY = 'gesture-proto.v1';
+  var SHAPE_MARK = { vline: 'ㅣ', hline: '—', vee: 'V', circle: 'O', bolt: '⚡' };
+  var COMBAT = ['vline', 'hline', 'vee', 'circle'];
+  /* Defaults not specified in the brief (reported at the end). */
+  var CFG = {
+    hpBase: 10, dmg: 1, bossDmg: 3, iframeMs: 800,
+    timeLimit: 75, bossTime: 90, quota: 20,
+    coinPerKill: 3, comboExtra: 2,
+    skillCd: 15, skillUnlockAt: 3,
+    idlePerMin: 4, idleMaxHours: 8,
+    upgradeBase: 15, atkStep: 0.08, hpStep: 3, coinStep: 0.25, maxLv: 10,
+    xpBase: 5, orbSpeed: 220
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function clamp(n, a, b) { return n < a ? a : n > b ? b : n; }
+  function now() { return performance.now(); }
+  function mul(seed) {
+    var s = seed | 0 || 1;
+    return function () {
+      s = (s + 0x6D2B79F5) | 0;
+      var t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var save = { coins: 0, atkLv: 0, hpLv: 0, coinLv: 0, cleared: 0, unlocked: 1, lastSeen: Date.now(), best: 0 };
+  var S = null; /* run state */
+  var qa = { timeScale: 1, noDelay: false, atkRoll: null, rng: null };
+  var raf = 0, lastTs = 0, toastT = 0;
+  var pointers = { down: false, id: null, pts: [] };
+  var idlePending = 0, idleShown = false;
+
+  function costOf(lv) { return CFG.upgradeBase * (lv + 1); }
+  function atkChance() { return Math.min(CFG.maxLv, save.atkLv) * CFG.atkStep; }
+  function maxHp() { return CFG.hpBase + save.hpLv * CFG.hpStep + (S && S.runHp || 0); }
+  function coinMult() { return 1 + save.coinLv * CFG.coinStep + (S && S.runCoin || 0); }
+  function skillUnlocked() { return save.cleared >= CFG.skillUnlockAt; }
+
+  function loadSave() {
+    try {
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        var o = JSON.parse(raw);
+        ['coins', 'atkLv', 'hpLv', 'coinLv', 'cleared', 'unlocked', 'lastSeen', 'best'].forEach(function (k) {
+          if (o[k] != null) save[k] = o[k];
+        });
+      }
+    } catch (e) {}
+  }
+  function persist(touch) {
+    if (touch !== false) save.lastSeen = Date.now();
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
+  }
+
+  function stageSpec(n) {
+    var boss = n > 0 && n % 5 === 0;
+    var types = n === 1 ? ['vline'] : n === 2 ? ['vline', 'hline'] : n === 3 ? ['vline', 'hline', 'vee'] : COMBAT.slice();
+    var minS = n <= 3 ? 1 : n <= 7 ? 2 : 2;
+    var maxS = n <= 3 ? 1 : n <= 7 ? 2 : 3;
+    return {
+      n: n, boss: boss,
+      time: boss ? CFG.bossTime : CFG.timeLimit,
+      quota: boss ? 1 : CFG.quota,
+      types: types, minS: minS, maxS: maxS,
+      spawnMs: 2000 - n * 90,
+      speed: 36 + n * 5,
+      bossShapes: n >= 10 ? 8 : 5
+    };
+  }
+
+  var RUN_UPGRADES = [
+    { id: 'boltRange', name: '번개 범위 증가', desc: '자동 번개가 더 멀리 닿습니다.' },
+    { id: 'aura', name: '자동 공격 오라', desc: '가까이 온 요괴의 모양을 조금씩 지웁니다.' },
+    { id: 'heal', name: '체력 회복', desc: '체력을 회복하고 이번 판 최대 체력이 조금 늘어납니다.' },
+    { id: 'slow', name: '둔화의 부적', desc: '요괴가 조금 느려집니다.' },
+    { id: 'wealth', name: '엽전 주머니', desc: '이번 판 코인 획득이 늘어납니다.' }
+  ];
+
+  function showOv(id) {
+    ['ov-title', 'ov-shop', 'ov-result', 'ov-idle', 'ov-level'].forEach(function (k) {
+      $(k).classList.toggle('show', k === id);
+    });
+  }
+  function hideOvs() {
+    ['ov-title', 'ov-shop', 'ov-result', 'ov-idle', 'ov-level'].forEach(function (k) { $(k).classList.remove('show'); });
+  }
+  function toast(msg) {
+    var el = $('toast');
+    el.hidden = false; el.textContent = msg;
+    toastT = now() + 1600;
+  }
+
+  function fillHp() {
+    var n = maxHp(), cur = S ? S.hp : n, h = '', i;
+    for (i = 0; i < n; i++) h += '<i' + (i < cur ? '' : ' class="off"') + '></i>';
+    $('hpPips').innerHTML = h;
+  }
+  function renderHud() {
+    if (!S) {
+      $('stageLabel').textContent = '대기';
+      $('timer').textContent = '—';
+      $('killLabel').textContent = '—';
+      $('coinLabel').textContent = '엽전 ' + save.coins;
+      $('lvlLabel').textContent = 'Lv —';
+      $('xpFill').style.width = '0%';
+      fillHp();
+      return;
+    }
+    $('stageLabel').textContent = (S.spec.boss ? '보스 ' : '') + S.spec.n + '판';
+    $('timer').textContent = Math.max(0, Math.ceil(S.timeLeft));
+    $('killLabel').textContent = S.spec.boss ? (S.kills ? '처치' : '생존') : (S.kills + '/' + S.spec.quota);
+    $('coinLabel').textContent = '엽전 ' + save.coins;
+    $('lvlLabel').textContent = 'Lv ' + S.level;
+    var need = xpNeed(S.level);
+    $('xpFill').style.width = Math.min(100, (S.xp / need) * 100) + '%';
+    fillHp();
+    var c = $('comboLabel');
+    if (S.comboFlash > 0) { c.hidden = false; c.textContent = S.lastCombo + ' 콤보!'; }
+    else c.hidden = true;
+    var aura = $('aura');
+    if (S.aura > 0) {
+      aura.hidden = false;
+      var r = auraR();
+      aura.style.width = aura.style.height = (r * 2) + 'px';
+    } else aura.hidden = true;
+  }
+  function xpNeed(lv) { return CFG.xpBase + (lv - 1) * 4; }
+
+  function fieldRect() { return $('field').getBoundingClientRect(); }
+  function heroPt() {
+    var r = fieldRect();
+    return { x: r.width * 0.5, y: r.height * 0.52 };
+  }
+  function resizeInk() {
+    var c = $('ink'), r = fieldRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = Math.max(1, Math.floor(r.width * dpr));
+    c.height = Math.max(1, Math.floor(r.height * dpr));
+    c.style.width = r.width + 'px';
+    c.style.height = r.height + 'px';
+    var ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function paintInk(pts, fading) {
+    var c = $('ink'), ctx = c.getContext('2d'), r = fieldRect();
+    ctx.clearRect(0, 0, r.width, r.height);
+    if (!pts || pts.length < 2) return;
+    var a = fading != null ? fading : 1;
+    var left = [], right = [], i;
+    for (i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      var q = pts[i === 0 ? i + 1 : i - 1];
+      var dx = p.x - q.x, dy = p.y - q.y, L = Math.hypot(dx, dy) || 1;
+      var nx = -dy / L, ny = dx / L;
+      var t = i / (pts.length - 1);
+      var w = (1.6 + 6.5 * Math.sin(Math.PI * t)) * (0.7 + 0.3 * a);
+      left.push({ x: p.x + nx * w, y: p.y + ny * w });
+      right.push({ x: p.x - nx * w, y: p.y - ny * w });
+    }
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    for (i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+    for (i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(18,16,14,' + (0.92 * a) + ')';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(18,16,14,' + (0.5 * a) + ')';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function edgePoint(side, rnd, w, h) {
+    var m = 24;
+    if (side === 0) return { x: rnd() * w, y: -m, side: 'top' };
+    if (side === 1) return { x: w + m, y: rnd() * h, side: 'right' };
+    if (side === 2) return { x: rnd() * w, y: h + m, side: 'bottom' };
+    return { x: -m, y: rnd() * h, side: 'left' };
+  }
+  function pickShapes(spec, rnd, n) {
+    var out = [], i;
+    for (i = 0; i < n; i++) out.push(spec.types[Math.floor(rnd() * spec.types.length)]);
+    return out;
+  }
+
+  function makeFoe(spec, opts) {
+    var r = fieldRect(), rnd = qa.rng || Math.random;
+    var el = $('tpl-foe').content.firstElementChild.cloneNode(true);
+    var isBoss = !!(opts && opts.boss);
+    var side;
+    if (opts && opts.side != null) side = opts.side;
+    else {
+      if (!S.sideBag || !S.sideBag.length) {
+        S.sideBag = [0, 1, 2, 3];
+        var i, j, tmp;
+        for (i = S.sideBag.length - 1; i > 0; i--) { j = Math.floor(rnd() * (i + 1)); tmp = S.sideBag[i]; S.sideBag[i] = S.sideBag[j]; S.sideBag[j] = tmp; }
+      }
+      side = S.sideBag.pop();
+    }
+    var p = edgePoint(side, rnd, r.width, r.height);
+    var nSh = isBoss ? 0 : (spec.minS + Math.floor(rnd() * (spec.maxS - spec.minS + 1)));
+    var foe = {
+      id: (S._id = (S._id || 0) + 1), el: el, x: p.x, y: p.y, side: p.side,
+      r: isBoss ? 36 : 22, isBoss: isBoss,
+      shapes: isBoss ? [] : pickShapes(spec, rnd, nSh),
+      seq: isBoss ? pickShapes({ types: COMBAT }, rnd, spec.bossShapes) : null,
+      seqI: 0, alive: true
+    };
+    if (isBoss) el.classList.add('boss');
+    $('foes').appendChild(el);
+    placeFoe(foe); drawFoeShapes(foe);
+    S.foes.push(foe);
+    S.spawnLog.push({ side: foe.side, t: S.elapsed });
+    return foe;
+  }
+  function drawFoeShapes(foe) {
+    var box = foe.el.querySelector('.foe-shapes'), h = '', i;
+    if (foe.isBoss) {
+      var cur = foe.seq[foe.seqI];
+      for (i = foe.seqI; i < foe.seq.length; i++) {
+        h += '<span class="chip' + (i === foe.seqI ? ' now' : '') + '">' + SHAPE_MARK[foe.seq[i]] + '</span>';
+      }
+    } else {
+      for (i = 0; i < foe.shapes.length; i++) h += '<span class="chip">' + SHAPE_MARK[foe.shapes[i]] + '</span>';
+    }
+    box.innerHTML = h;
+  }
+  function placeFoe(foe) {
+    foe.el.style.left = foe.x + 'px';
+    foe.el.style.top = foe.y + 'px';
+  }
+
+  function startStage(n, opts) {
+    opts = opts || {};
+    hideOvs();
+    $('foes').innerHTML = '';
+    $('orbs').innerHTML = '';
+    $('hero').classList.remove('hurt', 'win');
+    var spec = stageSpec(n);
+    S = {
+      spec: spec, hp: CFG.hpBase + save.hpLv * CFG.hpStep, maxHp0: CFG.hpBase + save.hpLv * CFG.hpStep,
+      timeLeft: spec.time, elapsed: 0, kills: 0, spawned: 0, spawnAcc: 0,
+      foes: [], orbs: [], spawnLog: [], speedLog: [],
+      xp: 0, level: 1, runHp: 0, runCoin: 0, aura: 0, boltR: 70, slow: 1,
+      auraAcc: 0, boltAcc: 0, skillCd: 0, iframe: 0, comboFlash: 0, lastCombo: 0,
+      paused: null, won: false, lost: false, playing: true, _id: 0
+    };
+    if (spec.boss) makeFoe(spec, { boss: true });
+    else { makeFoe(spec); S.spawned++; }
+    renderHud();
+    lastTs = 0;
+    if (!raf) loop(now());
+  }
+
+  function waveMul() {
+    if (!S) return 1;
+    return 1 + 0.7 * clamp(S.elapsed / S.spec.time, 0, 1);
+  }
+  function curSpeed() { return S.spec.speed * waveMul() * (S.slow || 1); }
+  function curSpawnMs() { return Math.max(420, S.spec.spawnMs / waveMul()); }
+  function auraR() { return 54 + S.aura * 22; }
+
+  function defeat(foe) {
+    if (!foe.alive) return;
+    foe.alive = false;
+    foe.el.remove();
+    S.kills++;
+    dropOrb(foe.x, foe.y);
+    S.foes = S.foes.filter(function (f) { return f.alive; });
+  }
+  function dropOrb(x, y) {
+    var el = document.createElement('div');
+    el.className = 'orb';
+    $('orbs').appendChild(el);
+    var o = { el: el, x: x, y: y };
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    S.orbs.push(o);
+  }
+  function gainXp(n) {
+    S.xp += n;
+    while (S.xp >= xpNeed(S.level)) {
+      S.xp -= xpNeed(S.level);
+      S.level++;
+      openLevelUp();
+    }
+  }
+  function openLevelUp() {
+    if (S.paused === 'levelup') { S._pendingLv = (S._pendingLv || 0) + 1; return; }
+    S.paused = 'levelup';
+    var rnd = qa.rng || Math.random;
+    var pool = RUN_UPGRADES.slice(), picks = [], i;
+    for (i = 0; i < 3 && pool.length; i++) {
+      var k = Math.floor(rnd() * pool.length);
+      picks.push(pool.splice(k, 1)[0]);
+    }
+    S.levelPicks = picks;
+    var box = $('levelChoices'); box.innerHTML = '';
+    picks.forEach(function (u) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn'; b.dataset.up = u.id;
+      b.innerHTML = '<strong>' + u.name + '</strong><br>' + u.desc;
+      b.addEventListener('click', function () { pickUpgrade(u.id); });
+      box.appendChild(b);
+    });
+    showOv('ov-level');
+  }
+  function pickUpgrade(id) {
+    if (!S || S.paused !== 'levelup') return false;
+    if (id === 'boltRange') S.boltR += 36;
+    else if (id === 'aura') S.aura += 1;
+    else if (id === 'heal') { S.runHp += 2; S.hp = Math.min(maxHp(), S.hp + 4 + 2); }
+    else if (id === 'slow') S.slow *= 0.82;
+    else if (id === 'wealth') S.runCoin += 0.25;
+    hideOvs();
+    S.paused = null;
+    renderHud();
+    if (S._pendingLv) { S._pendingLv--; openLevelUp(); }
+    return true;
+  }
+
+  function applyShape(type, src) {
+    if (!S || !S.playing || S.paused) return { killed: 0, erased: 0, type: type };
+    if (type === 'bolt') return applyBolt(src);
+    var double = (qa.atkRoll ? qa.atkRoll() : Math.random()) < atkChance();
+    var n = double ? 2 : 1, killed = 0, erased = 0, i, j;
+    S.foes.forEach(function (foe) {
+      if (!foe.alive) return;
+      if (foe.isBoss) {
+        for (j = 0; j < n; j++) {
+          if (foe.seq[foe.seqI] === type) {
+            foe.seqI++; erased++;
+            if (foe.seqI >= foe.seq.length) { defeat(foe); killed++; break; }
+          }
+        }
+        drawFoeShapes(foe);
+      } else {
+        for (j = 0; j < n; j++) {
+          var ix = foe.shapes.indexOf(type);
+          if (ix >= 0) { foe.shapes.splice(ix, 1); erased++; }
+        }
+        drawFoeShapes(foe);
+        if (!foe.shapes.length) { defeat(foe); killed++; }
+      }
+    });
+    var coins = 0;
+    if (killed) {
+      coins = Math.round(killed * CFG.coinPerKill * coinMult());
+      if (killed >= 2) {
+        var bonus = Math.round((killed - 1) * CFG.comboExtra * coinMult());
+        coins += bonus; S.lastCombo = killed; S.comboFlash = 1.2;
+      }
+      save.coins += coins; persist();
+    }
+    if (!erased) toast('화면에 그 모양이 없어요');
+    renderHud();
+    maybeEnd();
+    return { killed: killed, erased: erased, coins: coins, type: type, double: double };
+  }
+  function applyBolt(src) {
+    if (!skillUnlocked()) { toast('아직 스킬이 열리지 않았어요'); return { killed: 0, erased: 0, type: 'bolt' }; }
+    if (S.skillCd > 0) { toast('스킬이 아직 식지 않았어요'); return { killed: 0, erased: 0, type: 'bolt', cd: S.skillCd }; }
+    var h = heroPt(), r = (src === 'auto') ? S.boltR : 9999, killed = 0, erased = 0;
+    S.foes.slice().forEach(function (foe) {
+      if (!foe.alive) return;
+      if (Math.hypot(foe.x - h.x, foe.y - h.y) > r) return;
+      if (foe.isBoss) {
+        foe.seqI = Math.min(foe.seq.length, foe.seqI + 1); erased++;
+        drawFoeShapes(foe);
+        if (foe.seqI >= foe.seq.length) { defeat(foe); killed++; }
+      } else { erased += foe.shapes.length; defeat(foe); killed++; }
+    });
+    if (src !== 'auto') S.skillCd = CFG.skillCd;
+    if (killed) { save.coins += Math.round(killed * CFG.coinPerKill * coinMult()); persist(); }
+    renderHud(); maybeEnd();
+    return { killed: killed, erased: erased, type: 'bolt' };
+  }
+
+  function maybeEnd() {
+    if (!S || S.won || S.lost) return;
+    if (S.hp <= 0) { endRun(false); return; }
+    if (S.spec.boss) { if (S.kills >= 1) endRun(true); }
+    else if (S.kills >= S.spec.quota) endRun(true);
+  }
+  function endRun(win) {
+    if (!S || S.won || S.lost) return;
+    S.won = win; S.lost = !win; S.playing = false; S.paused = 'result';
+    $('hero').classList.toggle('win', win);
+    if (win) {
+      if (save.cleared < S.spec.n) save.cleared = S.spec.n;
+      if (save.unlocked < S.spec.n + 1) save.unlocked = Math.min(10, S.spec.n + 1);
+      if (save.best < S.spec.n) save.best = S.spec.n;
+      persist();
+      if (save.cleared === CFG.skillUnlockAt) toast('번개 모양을 그리면 화면의 요괴를 모두 공격해요');
+    }
+    $('resultTitle').textContent = win ? '승리' : '패배';
+    $('resultBody').textContent = win
+      ? (S.spec.n + '판을 막았습니다. 엽전 ' + save.coins)
+      : '요괴에게 닿았습니다. 다시 도전해 보세요.';
+    $('btnResultGo').textContent = win ? (S.spec.n >= 10 ? '첫 판으로' : '다음 판') : '다시';
+    showOv('ov-result');
+    renderHud();
+  }
+
+  function hitHero() {
+    if (S.iframe > 0) return;
+    S.hp -= 1; /* contact: normal 1, boss handled by caller amount already applied? */
+    S.iframe = CFG.iframeMs / 1000;
+    $('hero').classList.remove('hurt'); void $('hero').offsetWidth; $('hero').classList.add('hurt');
+    renderHud();
+    if (S.hp <= 0) endRun(false);
+  }
+
+  function loop(ts) {
+    raf = requestAnimationFrame(loop);
+    var scale = qa.timeScale || 1;
+    if (!lastTs) lastTs = ts;
+    var dt = Math.min(0.05, (ts - lastTs) / 1000) * scale;
+    lastTs = ts;
+    if (toastT && now() > toastT) { $('toast').hidden = true; toastT = 0; }
+    fadeInk(dt);
+    if (!S || !S.playing || S.paused) return;
+    step(dt);
+  }
+  var inkFade = 0, lastStroke = null;
+  function fadeInk(dt) {
+    if (!lastStroke) return;
+    inkFade -= dt;
+    if (inkFade <= 0) { lastStroke = null; paintInk(null); return; }
+    if (!pointers.down) paintInk(lastStroke, clamp(inkFade / 0.35, 0, 1));
+  }
+
+  function step(dt) {
+    S.elapsed += dt; S.timeLeft -= dt;
+    if (S.iframe > 0) S.iframe -= dt;
+    if (S.skillCd > 0) S.skillCd -= dt;
+    if (S.comboFlash > 0) S.comboFlash -= dt;
+    if (S.timeLeft <= 0) {
+      if (S.spec.boss ? S.kills >= 1 : S.kills >= S.spec.quota) endRun(true);
+      else endRun(false);
+      return;
+    }
+    var r = fieldRect(), h = heroPt(), spd = curSpeed();
+    if (!S.spec.boss) {
+      S.spawnAcc += dt * 1000;
+      var ms = curSpawnMs();
+      while (S.spawnAcc >= ms && S.spawned < S.spec.quota + 4 && S.foes.length < 18) {
+        S.spawnAcc -= ms; S.spawned++; makeFoe(S.spec);
+      }
+    }
+    if (S.speedLog.length < 2 || S.elapsed - S.speedLog[S.speedLog.length - 1].t > 1) {
+      S.speedLog.push({ t: S.elapsed, speed: spd, spawnMs: curSpawnMs() });
+    }
+    var i, foe, dx, dy, d, push;
+    for (i = 0; i < S.foes.length; i++) {
+      foe = S.foes[i];
+      dx = h.x - foe.x; dy = h.y - foe.y; d = Math.hypot(dx, dy) || 1;
+      var mv = (qa.moveScale == null ? 1 : qa.moveScale);
+      foe.x += (dx / d) * spd * dt * mv;
+      foe.y += (dy / d) * spd * dt * mv;
+      placeFoe(foe);
+      if (d < foe.r + 20) {
+        var dmg = foe.isBoss ? CFG.bossDmg : CFG.dmg;
+        if (S.iframe <= 0) {
+          S.hp -= dmg;
+          S.iframe = CFG.iframeMs / 1000;
+          $('hero').classList.remove('hurt'); void $('hero').offsetWidth; $('hero').classList.add('hurt');
+          renderHud();
+          if (S.hp <= 0) { endRun(false); return; }
+        }
+        push = foe.r + 36;
+        foe.x = h.x - (dx / d) * push;
+        foe.y = h.y - (dy / d) * push;
+      }
+    }
+    /* orbs attract */
+    var os = (qa.orbSpeed || CFG.orbSpeed);
+    S.orbs = S.orbs.filter(function (o) {
+      dx = h.x - o.x; dy = h.y - o.y; d = Math.hypot(dx, dy) || 1;
+      var v = os + (1 / Math.max(d, 8)) * 1800;
+      var step = v * dt;
+      if (step >= d - 16 || d < 18) { o.el.remove(); gainXp(1); return false; }
+      o.x += (dx / d) * step; o.y += (dy / d) * step;
+      o.el.style.left = o.x + 'px'; o.el.style.top = o.y + 'px';
+      return true;
+    });
+    if (S.aura > 0) {
+      S.auraAcc += dt;
+      if (S.auraAcc >= 2.2) {
+        S.auraAcc = 0;
+        var rad = auraR(), best = null, bd = 1e9;
+        S.foes.forEach(function (f) {
+          if (!f.alive) return;
+          d = Math.hypot(f.x - h.x, f.y - h.y);
+          if (d <= rad && d < bd) { bd = d; best = f; }
+        });
+        if (best) applyShape(best.isBoss ? best.seq[best.seqI] : best.shapes[0]);
+      }
+    }
+    if (S.boltR && skillUnlocked() && S.aura >= 0) {
+      /* periodic auto-bolt only if boltRange was picked (boltR > 70) */
+      if (S.boltR > 70) {
+        S.boltAcc += dt;
+        if (S.boltAcc >= 6) { S.boltAcc = 0; applyBolt('auto'); }
+      }
+    }
+    renderHud();
+  }
+
+  function localPts(e, field) {
+    var r = field.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  function onDown(e) {
+    if (pointers.down) return;
+    if (e.target.closest && e.target.closest('.ov.show, .btn')) return;
+    pointers.down = true; pointers.id = e.pointerId; pointers.pts = [localPts(e, $('field'))];
+    try { $('field').setPointerCapture(e.pointerId); } catch (err) {}
+    paintInk(pointers.pts, 1);
+  }
+  function onMove(e) {
+    if (!pointers.down || e.pointerId !== pointers.id) return;
+    var p = localPts(e, $('field'));
+    var last = pointers.pts[pointers.pts.length - 1];
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 1) pointers.pts.push(p);
+    paintInk(pointers.pts, 1);
+  }
+  function onUp(e) {
+    if (!pointers.down || (e.pointerId != null && e.pointerId !== pointers.id)) return;
+    pointers.down = false;
+    finishStroke(pointers.pts);
+  }
+  function finishStroke(pts) {
+    lastStroke = pts.slice(); inkFade = 0.45;
+    paintInk(lastStroke, 1);
+    if (!S || !S.playing || S.paused) return;
+    var rec = G.recognize(pts, { allowBolt: skillUnlocked() });
+    S.lastRec = rec;
+    if (!rec.type) {
+      toast('잘 안 그려졌어요. ㅣ — V O 중에 그려 보세요');
+      return rec;
+    }
+    return applyShape(rec.type);
+  }
+
+  function syntheticPath(type, x, y, s) {
+    s = s || 70;
+    function line(x1, y1, x2, y2, n) {
+      var p = [], i; for (i = 0; i < (n || 24); i++) { var t = i / ((n || 24) - 1); p.push({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }); }
+      return p;
+    }
+    if (type === 'vline') return line(x, y - s, x, y + s);
+    if (type === 'hline') return line(x - s, y, x + s, y);
+    if (type === 'vee') {
+      return line(x - s, y - s * 0.7, x, y + s * 0.8, 16).concat(line(x, y + s * 0.8, x + s, y - s * 0.7, 16).slice(1));
+    }
+    if (type === 'circle') {
+      var p = [], i, n = 36;
+      for (i = 0; i < n; i++) {
+        var a = -Math.PI / 2 + Math.PI * 2 * 0.98 * (i / (n - 1));
+        p.push({ x: x + Math.cos(a) * s * 0.7, y: y + Math.sin(a) * s * 0.7 });
+      }
+      return p;
+    }
+    /* bolt */
+    return line(x - s * 0.4, y - s, x + s * 0.5, y - s * 0.2, 12)
+      .concat(line(x + s * 0.5, y - s * 0.2, x - s * 0.5, y + s * 0.2, 12).slice(1))
+      .concat(line(x - s * 0.5, y + s * 0.2, x + s * 0.4, y + s, 12).slice(1));
+  }
+  function strokeType(type) {
+    var r = fieldRect();
+    var pts = syntheticPath(type, r.width * 0.5, r.height * 0.28, Math.min(80, r.width * 0.22));
+    pointers.down = false;
+    return finishStroke(pts);
+  }
+
+  function idleCoins(ms) {
+    var cap = CFG.idleMaxHours * 3600 * 1000;
+    var t = Math.min(Math.max(0, ms), cap);
+    return Math.floor((t / 60000) * CFG.idlePerMin * (1 + save.coinLv * CFG.coinStep));
+  }
+  function checkIdle() {
+    var ms = Date.now() - (save.lastSeen || Date.now());
+    var c = idleCoins(ms);
+    if (c <= 0) return 0;
+    idlePending = c; idleShown = true;
+    $('idleBody').textContent = '자리를 비운 동안 엽전 ' + c + '이 쌓였습니다.';
+    showOv('ov-idle');
+    return c;
+  }
+  function collectIdle(double) {
+    var n = idlePending; if (!n) return 0;
+    if (double) n *= 2;
+    save.coins += n; idlePending = 0; idleShown = false; persist();
+    hideOvs(); showOv('ov-title'); renderHud();
+    return n;
+  }
+
+  function refreshShop() {
+    $('shopCoins').textContent = save.coins;
+    function label(btn, name, lv, desc) {
+      var c = costOf(lv), max = lv >= CFG.maxLv;
+      btn.disabled = max || save.coins < c;
+      btn.innerHTML = name + ' Lv ' + lv + (max ? ' (최대)' : ' · ' + c + '엽전') + '<br>' + desc;
+    }
+    label($('buyAtk'), '공격력', save.atkLv, '한 번에 모양 2개를 지울 확률 ' + Math.round(atkChance() * 100) + '%');
+    label($('buyHp'), '영웅 체력', save.hpLv, '최대 체력 ' + (CFG.hpBase + save.hpLv * CFG.hpStep));
+    label($('buyCoin'), '코인 획득', save.coinLv, '획득량 ×' + (1 + save.coinLv * CFG.coinStep).toFixed(2));
+  }
+  function buy(stat) {
+    var lv = stat === 'atk' ? save.atkLv : stat === 'hp' ? save.hpLv : save.coinLv;
+    if (lv >= CFG.maxLv) return false;
+    var c = costOf(lv);
+    if (save.coins < c) return false;
+    save.coins -= c;
+    if (stat === 'atk') save.atkLv++;
+    else if (stat === 'hp') save.hpLv++;
+    else save.coinLv++;
+    persist(); refreshShop(); renderHud();
+    return true;
+  }
+
+  function guardEvents() {
+    var app = $('app');
+    function stop(e) { e.preventDefault(); }
+    ['touchstart', 'touchmove', 'touchend', 'gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+      document.addEventListener(ev, stop, { passive: false });
+      app.addEventListener(ev, stop, { passive: false });
+    });
+    document.addEventListener('contextmenu', stop);
+    document.addEventListener('dblclick', stop);
+    window.addEventListener('scroll', function () { window.scrollTo(0, 0); });
+    var f = $('field');
+    f.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('resize', resizeInk);
+  }
+
+  function bindUi() {
+    $('btnStart').addEventListener('click', function () { startStage(Math.min(save.unlocked, 10) || 1); });
+    $('btnShop').addEventListener('click', function () { refreshShop(); showOv('ov-shop'); });
+    $('btnResultShop').addEventListener('click', function () { refreshShop(); showOv('ov-shop'); });
+    $('btnResultGo').addEventListener('click', function () {
+      if (!S) { showOv('ov-title'); return; }
+      if (S.won) startStage(S.spec.n >= 10 ? 1 : S.spec.n + 1);
+      else startStage(S.spec.n);
+    });
+    $('btnIdleTake').addEventListener('click', function () { collectIdle(false); });
+    $('btnIdleDouble').addEventListener('click', function () {
+      $('btnIdleDouble').disabled = true;
+      $('btnIdleDouble').textContent = '광고 자리…';
+      setTimeout(function () { $('btnIdleDouble').disabled = false; $('btnIdleDouble').textContent = '광고로 두 배 받기'; collectIdle(true); }, qa.noDelay ? 0 : 800);
+    });
+    document.querySelectorAll('[data-buy]').forEach(function (b) {
+      b.addEventListener('click', function () { buy(b.getAttribute('data-buy')); });
+    });
+    $('btnShopClose').addEventListener('click', function () {
+      if (S && (S.won || S.lost)) showOv('ov-result');
+      else showOv('ov-title');
+    });
+  }
+
+  function boot() {
+    loadSave();
+    guardEvents();
+    bindUi();
+    resizeInk();
+    renderHud();
+    var idled = checkIdle();
+    if (!idled) showOv('ov-title');
+    persist();
+  }
+
+  var GP = {
+    CFG: CFG, gestures: G, SHAPE_MARK: SHAPE_MARK,
+    get save() { return save; },
+    get state() { return S; },
+    resetSave: function () {
+      save = { coins: 0, atkLv: 0, hpLv: 0, coinLv: 0, cleared: 0, unlocked: 1, lastSeen: Date.now(), best: 0 };
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      persist(); renderHud();
+    },
+    setQa: function (o) { Object.keys(o || {}).forEach(function (k) { qa[k] = o[k]; }); },
+    startStage: startStage,
+    strokeType: strokeType,
+    strokePath: function (pts) { return finishStroke(pts); },
+    recognize: function (pts, opt) { return G.recognize(pts, opt); },
+    buy: buy, pickUpgrade: pickUpgrade,
+    grantIdle: function (ms) { save.lastSeen = Date.now() - ms; persist(false); return checkIdle(); },
+    collectIdle: collectIdle,
+    idleCoins: idleCoins,
+    checkIdle: checkIdle,
+    openShop: function () { refreshShop(); showOv('ov-shop'); },
+    showTitle: function () { showOv('ov-title'); },
+    forceLevelUp: function () { if (!S) return false; openLevelUp(); return true; },
+    giveXp: function (n) { if (S) gainXp(n); },
+    snapshot: function () {
+      var r = fieldRect(), app = $('app').getBoundingClientRect();
+      var sides = { top: 0, right: 0, bottom: 0, left: 0 };
+      if (S) S.spawnLog.forEach(function (s) { sides[s.side] = (sides[s.side] || 0) + 1; });
+      return {
+        field: { w: r.width, h: r.height },
+        app: { w: app.width, h: app.height },
+        scroll: { x: window.scrollX, y: window.scrollY, sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight },
+        overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        overflowY: document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+        sides: sides, speedLog: S && S.speedLog, kills: S && S.kills, level: S && S.level,
+        aura: S && S.aura, boltR: S && S.boltR, hp: S && S.hp, coins: save.coins,
+        playing: !!(S && S.playing), paused: S && S.paused, stage: S && S.spec.n, boss: S && S.spec.boss,
+        touchAction: getComputedStyle(document.body).touchAction,
+        overscroll: getComputedStyle(document.body).overscrollBehavior,
+        toast: $('toast').hidden ? '' : $('toast').textContent
+      };
+    },
+    ready: true
+  };
+  window.GP = GP;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+</body>
+</html>
